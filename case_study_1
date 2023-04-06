@@ -1,0 +1,495 @@
+Title: "Google Data Analytics Case Study 1: How Does a Bike-Share Navigate Speedy Success?" (Cyclistic Bike-Share Analysis)
+
+The data can be downloaded in the following link: https://divvy-tripdata.s3.amazonaws.com/index.html
+The data was obtained from 2022 Jan to 2022 Dec. 
+
+##Phase 1, Prepare
+#Setting up environment, load the following libraries 
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(lubridate)
+library(skimr)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+
+#Import csv files
+getwd()
+setwd("/Users/~~~~/Desktop/Projects/CS1")
+Jan_2022 <- read_csv("cyclistic_2022/202201-divvy-tripdata/202201-divvy-tripdata.csv")
+Feb_2022 <- read_csv("cyclistic_2022/202202-divvy-tripdata/202202-divvy-tripdata.csv")
+Mar_2022 <- read_csv("cyclistic_2022/202203-divvy-tripdata/202203-divvy-tripdata.csv")
+Apr_2022 <- read_csv("cyclistic_2022/202204-divvy-tripdata/202204-divvy-tripdata.csv")
+May_2022 <- read_csv("cyclistic_2022/202205-divvy-tripdata/202205-divvy-tripdata.csv")
+Jun_2022 <- read_csv("cyclistic_2022/202206-divvy-tripdata/202206-divvy-tripdata.csv")
+Jul_2022 <- read_csv("cyclistic_2022/202207-divvy-tripdata/202207-divvy-tripdata.csv")
+Aug_2022 <- read_csv("cyclistic_2022/202208-divvy-tripdata/202208-divvy-tripdata.csv")
+Sep_2022 <- read_csv("cyclistic_2022/202209-divvy-tripdata/202209-divvy-publictripdata.csv")
+Oct_2022 <- read_csv("cyclistic_2022/202210-divvy-tripdata/202210-divvy-tripdata.csv")
+Nov_2022 <- read_csv("cyclistic_2022/202211-divvy-tripdata/202211-divvy-tripdata.csv")
+Dec_2022 <- read_csv("cyclistic_2022/202212-divvy-tripdata/202212-divvy-tripdata.csv")
+
+#check the structure and column names of each dataframes
+str(Jan_2022)
+str(Feb_2022)
+str(Mar_2022)
+str(Apr_2022)
+str(May_2022)
+str(Jun_2022)
+str(Jul_2022)
+str(Aug_2022)
+str(Sep_2022)
+str(Oct_2022)
+str(Nov_2022)
+str(Dec_2022)
+
+colnames(Jan_2022)
+colnames(Feb_2022)
+colnames(Mar_2022)
+colnames(Apr_2022)
+colnames(May_2022)
+colnames(Jun_2022)
+colnames(Jul_2022)
+colnames(Aug_2022)
+colnames(Sep_2022)
+colnames(Oct_2022)
+colnames(Nov_2022)
+colnames(Dec_2022)
+##Notice that all colnames and variables are consistent. 
+
+#Stack all dataframes into one.
+alltrips <- bind_rows(Jan_2022, Feb_2022, Mar_2022, Apr_2022, May_2022, Jun_2022, Jul_2022, Aug_2022, Sep_2022, Oct_2022, Nov_2022, Dec_2022)
+#check data
+str(alltrips)
+dim(alltrips)
+nrow(alltrips)
+
+##Phase 2, Process and clean data
+#Remove unnecessary columns for data extracts
+alltrips <- alltrips %>% 
+  select(-c(start_lat, start_lng, end_lat, end_lng))
+#View and check
+str(alltrips)
+## 13 columns from the start, minus 4 unnecessary columns = 9 columns, consistent
+
+#Add a ride_duration column in min, +1 column = 10 columns
+alltrips $ ride_duration <- difftime(alltrips $ ended_at, alltrips $ started_at, units = "mins")
+#View and check
+str(alltrips)
+
+#Round off to the nearest whole number for ride_duration
+alltrips $ ride_duration <- round(alltrips $ ride_duration)
+#Check
+str(alltrips)
+
+#Change POSI Dates as date format
+alltrips $ date <- as.Date(alltrips $ started_at) ## (Extracted date from started_at) +1 date column = 11 columns
+str(alltrips)
+alltrips $ day <- format(as.Date(alltrips $ date), "%d") ##(Extracted day from date) +1 day column = 12 columns
+str(alltrips)
+alltrips $ day_of_week <- format(as.Date(alltrips $ date), "%A") ##(+1 column for day in full name = 13 columns )
+str(alltrips)
+alltrips $ month_no <- format(as.Date(alltrips $ date), "%m") ##(Extracted month from date - months in numbers) +1 month column = 14 columns
+str(alltrips)
+alltrips $ month <- month(as.Date(alltrips $ date), label = TRUE) #months in words +1 column = 15
+str(alltrips)
+alltrips $ year <- format(as.Date(alltrips $ date), "%Y") ##(Extracted year from date) +1 year column = 16 columns
+str(alltrips)
+alltrips $ hour <- (format(alltrips $ started_at, format = '%H')) ##(Extracted starting hour, 00 - 23 from started_at time) +1 column = 17
+str(alltrips)
+
+#Rename variable details for better representation
+alltrips <- alltrips %>% 
+  rename(customers = member_casual)
+str(alltrips)
+
+#Check for types of customers
+unique(alltrips $ customers)
+
+#Change details of customers: "casual" to "casual rider", "member" to "annual member"
+alltrips $ customers <- gsub("casual", "casual rider", alltrips $ customers)
+alltrips $ customers <- gsub("member", "annual member", alltrips $ customers)
+str(alltrips)
+unique(alltrips $ customers)
+
+#Check that total riders corresponds to the total number of rows
+table(alltrips $ customers)
+3345685 + 2322032
+nrow(alltrips) ##Good, match
+
+#Check ride_duration is <= 0, to be removed from data
+nrow(alltrips %>% 
+       filter(ride_duration <= 0)) ##so there are 78908 rows to be removed
+
+#Filter out ride_duration > 0
+alltrips <- alltrips %>% 
+  filter(ride_duration > 0)
+str(alltrips)
+#Check
+3345685 + 2322032
+5667717 - 78908 #Equals 5588809, match
+
+##Step 3, analyze data
+#Find the percentage of trips by customer type, Member VS Casual
+library(scales) # convert data into percentage
+alltrips %>% 
+  group_by(customers) %>% 
+  summarize('no.of trips' = n(), 'total trips' = nrow(alltrips), '%trips' = percent(n()/nrow(alltrips)))
+
+#Compare annual members and casual riders by ride duration
+alltrips %>% 
+  group_by(customers) %>% 
+summarise('no. of trips' = n(), 'average trip time' = mean(ride_duration), 'median trip time' = median(ride_duration), 'minimum trip time' = min(ride_duration), 'maximum trip time' = max(ride_duration))
+
+#Number of customer trips per month and the average trip time
+alltrips %>% 
+  group_by(customers, month) %>% 
+  summarise('number of trips' = n(), 'average trip time' = mean(ride_duration)) %>% 
+  rmarkdown:: paged_table()
+
+#Number of customers per day of the week and the average trip time
+alltrips %>% 
+  group_by(customers, day_of_week) %>%
+  summarise('number of trips' = n(), 'average trip time' = mean(ride_duration)) %>% 
+  rmarkdown:: paged_table()
+unique(alltrips $ day_of_week)  
+
+#Number of customer trips per hour and the average trip time
+alltrips %>% 
+  group_by(customers, hour) %>% 
+  summarise('number of trips' = n(), 'average trip time' = mean(ride_duration)) %>% 
+  rmarkdown:: paged_table()
+
+##Step 4, Visualize
+#Annual member VS Casual rider pie chart 
+library(scales)
+alltrips %>% 
+  group_by(customers) %>% 
+  summarise('no.of trips' =n(), 'total trips' = nrow(alltrips), 'percentage' = percent(n()/nrow(alltrips))) %>% 
+  ggplot(aes(x = "", y = percentage, fill = customers)) +
+  geom_col() + geom_bar(stat = 'identity', width = 1, colour = 'white') +
+  scale_fill_manual(values = c('annual member' = 'aquamarine3','casual rider' = 'yellow3')) +
+  coord_polar(theta = 'y') +
+  theme_void() +
+  geom_text(aes(label = percentage), colour = 'black', size = 6, position = position_stack(vjust = 0.5)) +
+  labs(title = 'Distribution of customer trips', subtitle =  'Percentage: Annual Member vs Casual Rider', caption = 'Cyclistic 2022 Data')
+
+#Number of trips Annual Member vs Casual Rider per month
+ggplot(alltrips %>% 
+         group_by(customers, month) %>% 
+         summarise(number_of_rides = n())) +
+  geom_col(position="dodge", mapping= aes(x = month, y = number_of_rides/1000, fill = customers)) +  ##number_of_rides/1000 = to show number of trips in thousands
+  scale_fill_manual(values = c("annual member" = "aquamarine3", "casual rider" = "yellow3")) +
+  geom_text(aes(x = month, y = number_of_rides/1000, label = paste0(round(number_of_rides/1000,1))), 
+            position = position_dodge2(width = 0.9), vjust = -0.5, hjust = 0.5, size = 2.9, fontface = "bold") +
+  labs(title="Number of trips per month",caption = "Cyclistic Data 2022",x="Month", y="Number of Trips (in Thousands)")
+
+#Number of trips Annual Member vs Casual Rider per day
+# Create a vector of weekdays in the desired order
+weekdays_order <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+# Convert the day_of_week variable to a factor with the desired order
+alltrips$day_of_week <- factor(alltrips$day_of_week, levels = weekdays_order)
+
+# Plot the data with the reordered weekdays
+ggplot(alltrips %>% 
+         group_by(customers, day_of_week) %>% 
+         summarise(number_of_rides = n())) +
+  geom_col(position="dodge", mapping= aes(x = day_of_week, y = number_of_rides/1000, fill = customers)) +  ##number_of_rides/1000 = to show number of trips in thousands
+  scale_fill_manual(values = c("annual member" = "aquamarine3", "casual rider" = "yellow3")) +
+  geom_text(aes(x = day_of_week, y = number_of_rides/1000, label = paste0(round(number_of_rides/1000,1))), 
+            position = position_dodge2(width = 0.9), vjust = -0.5, hjust = 0.5, size = 2.9, fontface = "bold") +
+  labs(title="Number of trips per day",caption = "Cyclistic Data 2022",x="Days of the Week", y="Number of Trips (in Thousands)")
+
+#Average trip duration by customers per days of the week
+ggplot(alltrips %>% 
+         group_by(customers, day_of_week) %>% 
+         summarise(number_of_rides = n(), average_trip_time = mean(ride_duration))) +
+  geom_col(position="dodge", mapping= aes(x = day_of_week, y = average_trip_time, fill = customers)) +  
+  scale_fill_manual(values = c("annual member" = "aquamarine3", "casual rider" = "yellow3")) +
+  geom_text(aes(x = day_of_week, y = average_trip_time, label = paste0(round(average_trip_time,1))), 
+            position = position_dodge2(width = 0.9), vjust = -0.5, hjust = 0.5, size = 2.9, fontface = "bold") +
+  labs(title="Average trip duration by customers per day of the week",caption = "Cyclistic Data 2022",x="Days of the Week", y="Average trip time (in minutes)")
+
+#Number of trips per hour on weekdays
+ggplot(alltrips %>%
+         filter(day_of_week %in% c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')) %>% 
+         group_by(customers, hour) %>% 
+         summarise(number_of_rides = n())) +
+  geom_col(position="dodge", mapping= aes(x = hour, y = number_of_rides/1000, fill = customers)) +  
+  scale_fill_manual(values = c("annual member" = "aquamarine3", "casual rider" = "yellow3")) +
+  geom_text(aes(x = hour, y = number_of_rides/1000, label = paste0(round(number_of_rides/1000,1))), 
+            position = position_dodge2(width = 0.9), vjust = -0.5, hjust = 0.5, size = 2.2, fontface = "bold") +
+  labs(title="Customer trips per hour on weekdays", subtitle = "Mon - Fri : Annual Member vs Casual Rider", caption = "Cyclistic Data 2022",x="Hour", y="Number of trips (in Thousands)")
+
+#Number of trips per hour on weekends
+ggplot(alltrips %>%
+         filter(day_of_week %in% c('Saturday', 'Sunday')) %>% 
+         group_by(customers, hour) %>% 
+         summarise(number_of_rides = n())) +
+  geom_col(position="dodge", mapping= aes(x = hour, y = number_of_rides/1000, fill = customers)) +  
+  scale_fill_manual(values = c("annual member" = "aquamarine3", "casual rider" = "yellow3")) +
+  geom_text(aes(x = hour, y = number_of_rides/1000, label = paste0(round(number_of_rides/1000,1))), 
+            position = position_dodge2(width = 0.9), vjust = -0.5, hjust = 0.5, size = 2.2, fontface = "bold") +
+  labs(title="Customer trips per hour on weekends", subtitle = "Sat & Sun : Annual Member vs Casual Rider", caption = "Cyclistic Data 2022",x="Hour", y="Number of trips (in Thousands)")
+
+#Average trip duration per hour on weekdays
+ggplot(alltrips %>%
+         filter(day_of_week %in% c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')) %>% 
+         group_by(customers, hour) %>% 
+         summarise(number_of_rides = n(), average_trip_time = mean(ride_duration))) +
+  geom_col(position="dodge", mapping= aes(x = hour, y = average_trip_time, fill = customers)) +  
+  scale_fill_manual(values = c("annual member" = "aquamarine3", "casual rider" = "yellow3")) +
+  geom_text(aes(x = hour, y = average_trip_time, label = paste0(round(average_trip_time,1))), 
+            position = position_dodge2(width = 0.9), vjust = -0.5, hjust = 0.5, size = 2.2, fontface = "bold") +
+  labs(title="Customers' average trips per hour on weekdays", subtitle = "Mon - Fri : Annual Member vs Casual Rider", caption = "Cyclistic Data 2022",x="Hour", y="Average trip duration (in minutes)")
+
+#Average trip duration per hour on weekends
+ggplot(alltrips %>%
+         filter(day_of_week %in% c('Saturday', 'Sunday')) %>% 
+         group_by(customers, hour) %>% 
+         summarise(number_of_rides = n(), average_trip_time = mean(ride_duration))) +
+  geom_col(position="dodge", mapping= aes(x = hour, y = average_trip_time, fill = customers)) +  
+  scale_fill_manual(values = c("annual member" = "aquamarine3", "casual rider" = "yellow3")) +
+  geom_text(aes(x = hour, y = average_trip_time, label = paste0(round(average_trip_time,1))), 
+            position = position_dodge2(width = 0.9), vjust = -0.5, hjust = 0.5, size = 2.2, fontface = "bold") +
+  labs(title="Customers' average trips per hour on weekends", subtitle = "Sat & Sun : Annual Member vs Casual Rider", caption = "Cyclistic Data 2022",x="Hour", y="Average trip duration (in minutes)")
+
+#Comparing average trip duration (in minutes) per hour on each day
+#plot 1: Average ride duration per user type: Member vs Casual
+Average_ride_duration <- ggplot(alltrips %>%
+            filter(day_of_week %in% c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')) %>% 
+            group_by(customers, day_of_week, hour) %>% 
+            summarise(number_of_rides = n(), average_trip_time = mean(ride_duration))) +
+  geom_col(position="dodge", mapping= aes(x = hour, y = average_trip_time, fill = customers)) +  
+  scale_fill_manual(values = c("annual member" = "aquamarine3", "casual rider" = "yellow3")) +
+  geom_text(aes(x = hour, y = average_trip_time, label = paste0(round(average_trip_time,1))), 
+            position = position_dodge2(width = 0.9), vjust = -0.5, hjust = 0.5, size = 1.5, fontface = "bold") +
+  expand_limits(y=90) +
+  facet_grid(day_of_week ~ customers, labeller = as_labeller(c('casual rider' = 'Casual Rider', 'annual member' = 'Annual Member', 'Monday' = 'Monday', 'Tuesday' = 'Tuesday', 'Wednesday' = 'Wednesday', 'Thursday' = 'Thursday', 'Friday' = 'Friday'))) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title="Customers' average trip duration per hour on weekdays", subtitle = "Mon - Fri : Annual Member vs Casual Rider", caption = "Cyclistic Data 2022",x="Hour", y="Average trip duration (in minutes)") +
+  theme(legend.position = 'none')
+
+#plot 2: Member vs Casual total rides (in thousands) per hour of the day
+member_casual <- ggplot(alltrips %>%
+            filter(day_of_week %in% c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')) %>% 
+            group_by(customers, day_of_week, hour) %>% 
+            summarise(number_of_rides = n())) +
+  geom_col(position="dodge", mapping= aes(x = hour, y = number_of_rides/1000, fill = customers)) +  
+  scale_fill_manual(values = c("annual member" = "aquamarine3", "casual rider" = "yellow3")) +
+  geom_text(aes(x = hour, y = number_of_rides/1000, label = paste0(round(number_of_rides/1000,1))), 
+            position = position_dodge2(width = 0.9), vjust = -0.5, hjust = 0.5, size = 1.5, fontface = "bold") +
+  expand_limits(y = 70) +
+  facet_grid(day_of_week ~ customers, labeller = as_labeller(c('casual rider' = 'Casual Rider', 'annual member' = 'Annual Member', 'Monday' = 'Monday', 'Tuesday' = 'Tuesday', 'Wednesday' = 'Wednesday', 'Thursday' = 'Thursday', 'Friday' = 'Friday'))) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title="Total trips per hour on weekdays", subtitle = "Mon - Fri : Annual Member vs Casual Rider", caption = "Cyclistic Data 2022",x="Hour", y="Total trips (in thousands)") +
+  theme(legend.position = 'none')
+
+#Combine the two plots side by side
+#install patchwork package
+install.packages('patchwork')
+library(patchwork)
+member_casual + Average_ride_duration + plot_layout(ncol = 2)
+
+#Comparing average trip duration (in minutes) per hour on Sats & Suns
+#plot 1: Average ride duration per user type: Member vs Casual
+Average_ride_duration_2 <- ggplot(alltrips %>%
+                                  filter(day_of_week %in% c('Saturday', 'Sunday')) %>% 
+                                  group_by(customers, day_of_week, hour) %>% 
+                                  summarise(number_of_rides = n(), average_trip_time = mean(ride_duration))) +
+  geom_col(position="dodge", mapping= aes(x = hour, y = average_trip_time, fill = customers)) +  
+  scale_fill_manual(values = c("annual member" = "aquamarine3", "casual rider" = "yellow3")) +
+  geom_text(aes(x = hour, y = average_trip_time, label = paste0(round(average_trip_time,1))), 
+            position = position_dodge2(width = 0.9), vjust = -0.5, hjust = 0.5, size = 1.5, fontface = "bold") +
+  expand_limits(y=80) +
+  facet_grid(day_of_week ~ customers, labeller = as_labeller(c('casual rider' = 'Casual Rider', 'annual member' = 'Annual Member', 'Saturday' = 'Saturday', 'Sunday' = 'Sunday'))) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title="Customers' average trip duration per hour on weekends", subtitle = "Sat & Sun : Annual Member vs Casual Rider", caption = "Cyclistic Data 2022",x="Hour", y="Average trip duration (in minutes)") +
+  theme(legend.position = 'none')
+
+#plot 2: Member vs Casual total rides (in thousands) per hour of the day
+member_casual_2 <- ggplot(alltrips %>%
+                          filter(day_of_week %in% c('Satuday', 'Sunday')) %>% 
+                          group_by(customers, day_of_week, hour) %>% 
+                          summarise(number_of_rides = n())) +
+  geom_col(position="dodge", mapping= aes(x = hour, y = number_of_rides/1000, fill = customers)) +  
+  scale_fill_manual(values = c("annual member" = "aquamarine3", "casual rider" = "yellow3")) +
+  geom_text(aes(x = hour, y = number_of_rides/1000, label = paste0(round(number_of_rides/1000,1))), 
+            position = position_dodge2(width = 0.9), vjust = -0.5, hjust = 0.5, size = 1.5, fontface = "bold") +
+  expand_limits(y = 35) +
+  facet_grid(day_of_week ~ customers, labeller = as_labeller(c('casual rider' = 'Casual Rider', 'annual member' = 'Annual Member', 'Saturday' = 'Saturday', 'Sunday' = 'Sunday'))) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title="Total trips per hour on weekends", subtitle = "Sat & Sun : Annual Member vs Casual Rider", caption = "Cyclistic Data 2022",x="Hour", y="Total trips (in thousands)") +
+  theme(legend.position = 'none')
+
+#Combine the two plots side by side
+member_casual_2 + Average_ride_duration_2 + plot_layout(ncol = 2)
+
+#Compare daily use: Causal Riders vs Annual Members
+daily_use <- ggplot(alltrips %>%
+                      group_by(customers, date) %>% 
+                      summarise(number_of_rides = n(), average_trip_time = mean(ride_duration))) +
+  geom_line(mapping = aes(x = date, y = average_trip_time, color = customers), stat = 'identity') +
+  scale_color_manual(values = c("annual member" = "aquamarine3", "casual rider" = "yellow3")) +
+  labs(title="Average daily ride duration per user", caption = "Cyclistic Data 2022",x="Day", y="Average trip duration (in minutes)")
+daily_use
+
+#Compare average ride duration for bike type use per customer type: Casual Rider vs Annual Member by month
+#plot 1: Average ride duration per user type: Member vs Casual
+Average_ride_duration_3 <- ggplot(alltrips %>%
+                                    filter(rideable_type %in% c("electric_bike", "classic_bike", "docked_bike")) %>% 
+                                    group_by(customers, rideable_type, month) %>% 
+                                    summarise(number_of_rides = n(), average_trip_time = mean(ride_duration))) +
+  geom_col(position="dodge", mapping= aes(x = month, y = average_trip_time, fill = customers)) +  
+  scale_fill_manual(values = c("annual member" = "aquamarine3", "casual rider" = "yellow3")) +
+  geom_text(aes(x = month, y = average_trip_time, label = paste0(round(average_trip_time,1))), 
+            position = position_dodge2(width = 0.9), vjust = -0.5, hjust = 0.5, size = 2.5, fontface = "bold") +
+  expand_limits(y=300) +
+  facet_grid(rows = vars(rideable_type), cols = vars(customers), 
+             labeller = labeller(customers = c('casual rider' = 'Casual Rider', 'annual member' = 'Annual Member', 'electric_bike' = 'Electric', 'classic_bike' = 'Classic', 'docked_bike' = 'Docked'))) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title="Average trip duration by Bike type", caption = "Cyclistic Data 2022", x="Month", y="Average trip duration (in minutes)") +
+  theme(legend.position = 'none')
+
+#plot 2: Member vs Casual total rides (in thousands) per hour of the day
+member_casual_3 <- ggplot(alltrips %>%
+                            filter(rideable_type %in% c("electric_bike", "classic_bike", "docked_bike")) %>%  
+                            group_by(customers, rideable_type, month) %>% 
+                            summarise(number_of_rides = n())) +
+  geom_col(position="dodge", mapping= aes(x = month, y = number_of_rides/1000, fill = customers)) +  
+  scale_fill_manual(values = c("annual member" = "aquamarine3", "casual rider" = "yellow3")) +
+  geom_text(aes(x = month, y = number_of_rides/1000, label = paste0(round(number_of_rides/1000,1))), 
+            position = position_dodge2(width = 0.9), vjust = -0.5, hjust = 0.5, size = 2.5, fontface = "bold") +
+  expand_limits(y = 300) +
+  facet_grid(rows = vars(rideable_type), cols = vars(customers), 
+             labeller = labeller(customers = c('casual rider' = 'Casual Rider', 'annual member' = 'Annual Member'), 
+                                 rideable_type = c('electric_bike' = 'Electric', 'classic_bike' = 'Classic', 'docked_bike' = 'Docked'))) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title="Total trips by Bike type", caption = "Cyclistic Data 2022", x="Month", y="Total trips (in thousands)") +
+  theme(legend.position = 'none')
+
+
+#Combine the two plots side by side
+member_casual_3 + Average_ride_duration_3 + plot_layout(ncol = 2)
+
+#Filter out top 10 most popular start stations by customer type
+#plot 1: Casual rider
+casual_rider <- ggplot(alltrips %>% 
+                         drop_na() %>% 
+                         filter(customers %in% "casual rider") %>% 
+                         group_by(start_station_name, customers) %>%
+                         summarize(count=n()) %>% 
+                         arrange(desc(count)) %>% 
+                         head(10)) +
+  scale_fill_manual(values = c("casual rider" = "yellow3")) +
+  geom_col(position="dodge", mapping = aes(x = count/1000, y= reorder(start_station_name, count), fill= customers)) +
+  geom_text(aes(x = count/1000, y = reorder(start_station_name, count), label = paste0(round(count/1000,1))), 
+            vjust = 0.5, hjust = -0.5, size = 2.5, fontface = "bold", position = position_dodge2(width = 0.9)) +
+  expand_limits(x = 60) +
+  labs(title="10 Most Popular Casual Rider Start Stations", caption = "Cyclistic Data 2022", x="Number of Trips (in Thousands)", y="Start Stations")
+
+#plot 2: annual member
+annual_member <- ggplot(alltrips %>% 
+                          drop_na() %>% 
+                          filter(customers %in% "annual member") %>% 
+                          group_by(start_station_name, customers) %>%
+                          summarize(count=n()) %>% 
+                          arrange(desc(count)) %>% 
+                          head(10)) +
+  scale_fill_manual(values = c("annual member" = "aquamarine3")) +
+  geom_col(position="dodge", mapping = aes(x = count/1000, y= reorder(start_station_name, count), fill= customers)) +
+  geom_text(aes(x = count/1000, y = reorder(start_station_name, count), label = paste0(round(count/1000,1))), 
+            vjust = 0.5, hjust = -0.5, size = 2.5, fontface = "bold", position = position_dodge2(width = 0.9)) +
+  expand_limits(x = 30) +
+  labs(title="10 Most Popular Annual Member Start Stations", caption = "Cyclistic Data 2022", x="Number of Trips (in Thousands)", y="Start Stations")
+
+#Combine the two plots side by side
+annual_member + casual_rider + plot_layout(ncol = 2)
+                      
+##Top 10 most popular end stations by customer type
+#plot 1: Casual rider
+casual_rider_2 <- ggplot(alltrips %>% 
+                         drop_na() %>% 
+                         filter(customers %in% "casual rider") %>% 
+                         group_by(end_station_name, customers) %>%
+                         summarize(count=n()) %>% 
+                         arrange(desc(count)) %>% 
+                         head(10)) +
+  scale_fill_manual(values = c("casual rider" = "yellow3")) +
+  geom_col(position="dodge", mapping = aes(x = count/1000, y= reorder(end_station_name, count), fill= customers)) +
+  geom_text(aes(x = count/1000, y = reorder(end_station_name, count), label = paste0(round(count/1000,1))), 
+            vjust = 0.5, hjust = -0.5, size = 2.5, fontface = "bold", position = position_dodge2(width = 0.9)) +
+  expand_limits(x = 60) +
+  labs(title="10 Most Popular Casual Rider End Stations", caption = "Cyclistic Data 2022", x="Number of Trips (in Thousands)", y="End Stations")
+
+#plot 2: annual member
+annual_member_2 <- ggplot(alltrips %>% 
+                          drop_na() %>% 
+                          filter(customers %in% "annual member") %>% 
+                          group_by(end_station_name, customers) %>%
+                          summarize(count=n()) %>% 
+                          arrange(desc(count)) %>% 
+                          head(10)) +
+  scale_fill_manual(values = c("annual member" = "aquamarine3")) +
+  geom_col(position="dodge", mapping = aes(x = count/1000, y= reorder(end_station_name, count), fill= customers)) +
+  geom_text(aes(x = count/1000, y = reorder(end_station_name, count), label = paste0(round(count/1000,1))), 
+            vjust = 0.5, hjust = -0.5, size = 2.5, fontface = "bold", position = position_dodge2(width = 0.9)) +
+  expand_limits(x = 30) +
+  labs(title="10 Most Popular Annual Member End Stations", caption = "Cyclistic Data 2022", x="Number of Trips (in Thousands)", y="End Stations")
+
+#Combine the two plots side by side
+annual_member_2 + casual_rider_2 + plot_layout(ncol = 2)
+
+##Top 10 Routes by customers
+#Create a 'route' column (+1 = 18 columns)
+alltrips $ route <- paste(alltrips $ start_station_name, '-', alltrips $ end_station_name)
+
+#plot 1: Casual rider
+casual_rider_3 <- ggplot(alltrips %>% 
+                           drop_na() %>% 
+                           filter(customers %in% "casual rider") %>% 
+                           group_by(route, customers) %>%
+                           summarize(count=n()) %>% 
+                           arrange(desc(count)) %>% 
+                           head(10)) +
+  scale_fill_manual(values = c("casual rider" = "yellow3")) +
+  geom_col(position="dodge", mapping = aes(x = count/1000, y= reorder(route, count), fill= customers)) +
+  geom_text(aes(x = count/1000, y = reorder(route, count), label = paste0(round(count/1000,1))), 
+            vjust = 0.5, hjust = -0.5, size = 2.5, fontface = "bold", position = position_dodge2(width = 0.9)) +
+  expand_limits(x = 15) +
+  labs(title="Top 10 Casual Rider Routes", caption = "Cyclistic Data 2022", x="Number of Trips (in Thousands)", y="Routes")
+
+#plot 2: annual member
+annual_member_3 <- ggplot(alltrips %>% 
+                            drop_na() %>% 
+                            filter(customers %in% "annual member") %>% 
+                            group_by(route, customers) %>%
+                            summarize(count=n()) %>% 
+                            arrange(desc(count)) %>% 
+                            head(10)) +
+  scale_fill_manual(values = c("annual member" = "aquamarine3")) +
+  geom_col(position="dodge", mapping = aes(x = count/1000, y= reorder(route, count), fill= customers)) +
+  geom_text(aes(x = count/1000, y = reorder(route, count), label = paste0(round(count/1000,1))), 
+            vjust = 0.5, hjust = -0.5, size = 2.5, fontface = "bold", position = position_dodge2(width = 0.9)) +
+  expand_limits(x = 8) +
+  labs(title="Top 10 Annual Member Routes", caption = "Cyclistic Data 2022", x="Number of Trips (in Thousands)", y="Routes")
+
+#Combine the two plots side by side
+annual_member_3 + casual_rider_3 + plot_layout(ncol = 2)
+
+##Top 10 overall routes by customers (annual member and casual riders)
+ggplot(alltrips %>% 
+         drop_na() %>% 
+         filter(!is.na(customers)) %>% 
+         group_by(route, customers) %>%  
+         summarize(count=n()) %>% 
+         arrange(desc(count)) %>% 
+         head(10)) +
+  scale_fill_manual(values = c('casual rider' = 'orange2', 'annual member' = 'orange2')) +
+  geom_col(position="dodge", mapping = aes(x = count/1000, y= reorder(route, count), fill= customers)) +
+  geom_text(aes(x = count/1000, y = reorder(route, count), label = paste0(round(count/1000,1))), 
+            vjust = 0.5, hjust = -0.5, size = 2.5, fontface = "bold", position = position_dodge2(width = 0.9)) +
+  labs(title="Top 10 Overall Routes", caption = "Cyclistic Data 2022", x="Number of Trips (in Thousands)", y="Routes") +
+  guides(fill=FALSE)
