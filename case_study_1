@@ -2,6 +2,7 @@ Title: "Google Data Analytics Case Study 1: How Does a Bike-Share Navigate Speed
 
 The data can be downloaded in the following link: https://divvy-tripdata.s3.amazonaws.com/index.html
 The data was obtained from 2022 Jan to 2022 Dec. 
+To view at kaggle: https://www.kaggle.com/datasets/kathleenkym/google-data-analytics-case-study-1?datasetId=3097127&sortBy=dateRun&tab=profile
 
 ##Phase 1, Prepare
 #Setting up environment, load the following libraries 
